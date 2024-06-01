@@ -26,7 +26,8 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
 
     const employeeCollection = client.db("assetDB").collection("employees");
-    const managerCollection = client.db("assetDB").collection("managers");
+    // const managerCollection = client.db("assetDB").collection("managers");
+    const paymentCollection = client.db("assetDB").collection("payments");
 
     // employee related api
     app.post("/employees", async (req, res) => {
@@ -35,7 +36,36 @@ async function run() {
       res.send(result);
     });
 
+    // get single employee data
+    app.get("/employee/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email, role: "HR" };
+      const result = await employeeCollection.findOne(query);
+      res.send(result);
+    });
+
+    // update employee property
+    app.patch("/employee/:email", async (req, res) => {
+      const email = req.params.email;
+      const status = req.body.status;
+      console.log(status);
+      const query = { email };
+      const updateDoc = {
+        $set: {
+          status,
+        },
+      };
+      const result = await employeeCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
     // manager related api
+    // app.get("/manager/:email", async (req, res) => {
+    //   const { email } = req.params ?? {};
+    //   const result = await managerCollection.findOne({ email });
+    //   res.send(result);
+    // });
+
     app.post("/managers", async (req, res) => {
       const hrDAta = req.body;
       const result = await managerCollection.insertOne(hrDAta);
@@ -58,6 +88,13 @@ async function run() {
       });
       // send client secret as response
       res.send({ clientSecret: client_secret });
+    });
+
+    // add payment to db
+    app.post("/payments", async (req, res) => {
+      const paymentData = req.body;
+      const result = await paymentCollection.insertOne(paymentData);
+      res.send(result);
     });
 
     // await client.connect();
