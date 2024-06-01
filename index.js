@@ -26,7 +26,7 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
 
     const employeeCollection = client.db("assetDB").collection("employees");
-    // const managerCollection = client.db("assetDB").collection("managers");
+    const assetCollection = client.db("assetDB").collection("assets");
     const paymentCollection = client.db("assetDB").collection("payments");
 
     // employee related api
@@ -41,6 +41,14 @@ async function run() {
       const email = req.params.email;
       const query = { email: email, role: "HR" };
       const result = await employeeCollection.findOne(query);
+      res.send(result);
+    });
+
+    // get a employee role
+    app.get("/employee/role/:email", async (req, res) => {
+      const email = req.params.email;
+      console.log(email, "roll----------------------------");
+      const result = await employeeCollection.findOne({ email });
       res.send(result);
     });
 
@@ -59,16 +67,10 @@ async function run() {
       res.send(result);
     });
 
-    // manager related api
-    // app.get("/manager/:email", async (req, res) => {
-    //   const { email } = req.params ?? {};
-    //   const result = await managerCollection.findOne({ email });
-    //   res.send(result);
-    // });
-
-    app.post("/managers", async (req, res) => {
-      const hrDAta = req.body;
-      const result = await managerCollection.insertOne(hrDAta);
+    // asset related api
+    app.post("/assets", async (req, res) => {
+      const assetData = req.body;
+      const result = await assetCollection.insertOne(assetData);
       res.send(result);
     });
 
