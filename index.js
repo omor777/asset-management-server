@@ -74,6 +74,14 @@ async function run() {
       res.send(result);
     });
 
+    // get requested assets for employee
+    app.get("/my-requested-assets/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { "requester_info.email": email };
+      const result = await assetCollection.find(query).toArray();
+      res.send(result);
+    });
+
     // get all request ass for hr
     app.get("/assets/all-requests/:email", async (req, res) => {
       // TODO: search functionality implemented
