@@ -81,6 +81,21 @@ async function run() {
       res.send(result);
     });
 
+    // update some property by id
+    app.patch("/asset/update/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id,'-----------id');
+      const assetInfo = req.body;
+      const query = { _id: new ObjectId(id) };
+      const updatedDoc = {
+        $set: {
+          ...assetInfo,
+        },
+      };
+      const result = await assetCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+
     // delete a asset by id
     app.delete("/asset/:id", async (req, res) => {
       const id = req.params.id;
