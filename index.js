@@ -76,8 +76,12 @@ async function run() {
 
     // get all request ass for hr
     app.get("/assets/all-requests/:email", async (req, res) => {
+      // TODO: search functionality implemented
       const email = req.params?.email;
-      const query = { "provider_info.email": email, status: "pending" };
+      const query = {
+        "provider_info.email": email,
+        request_count: { $gte: 0 },
+      };
       const result = await assetCollection.find(query).toArray();
       res.send(result);
     });
@@ -99,8 +103,39 @@ async function run() {
         $set: {
           ...assetInfo,
         },
+        $inc: { request_count: 1 },
       };
       const result = await assetCollection.updateOne(query, updatedDoc);
+      res.send(result);
+    });
+
+    // update request asset property by id
+    app.patch("/asset/req-asset/:id", async (req, res) => {
+      const id = req.params.id;
+      const updatedAssetData = req.body;
+
+      console.log(updatedAssetData, "---------from client");
+
+      // Create the initial update document
+      const updateDoc = {
+        $set: {
+          ...updatedAssetData,
+        },
+        $inc: { product_quantity: -1, request_count: 1 },
+      };
+
+      // First update: Decrease product quantity and update other fields
+      const result = await assetCollection.updateOne(
+        { _id: new ObjectId(id) },
+        updateDoc
+      );
+
+      // Second update: Check and set availability if product_quantity is less than 1
+      await assetCollection.updateOne(
+        { _id: new ObjectId(id), product_quantity: { $lt: 1 } },
+        { $set: { availability: "Out of stock" } }
+      );
+
       res.send(result);
     });
 
@@ -108,14 +143,14 @@ async function run() {
     app.delete("/asset/:id", async (req, res) => {
       const id = req.params.id;
       const result = await assetCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
+      res.send({ result, r });
     });
 
     // create payment intent
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
       const priceInCent = parseFloat(price) * 100;
-      console.log(priceInCent, "--------------> price");
+      // console.log(priceInCent, "--------------> price");
       if (!price || priceInCent < 1) return;
       // generate client secrete
       const { client_secret } = await stripe.paymentIntents.create({
