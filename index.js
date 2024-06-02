@@ -9,7 +9,7 @@ const port = process.env.PORT || 4000;
 app.use(express.json());
 app.use(cors());
 
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6ze9kj8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -68,9 +68,23 @@ async function run() {
     });
 
     // asset related api
+    app.get("/assets", async (req, res) => {
+      // TODO: search, filter, sorting
+      const result = await assetCollection.find().toArray();
+      res.send(result);
+    });
+
+    // add a asset to db
     app.post("/assets", async (req, res) => {
       const assetData = req.body;
       const result = await assetCollection.insertOne(assetData);
+      res.send(result);
+    });
+
+    // delete a asset by id
+    app.delete("/asset/:id", async (req, res) => {
+      const id = req.params.id;
+      const result = await assetCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
