@@ -74,6 +74,14 @@ async function run() {
       res.send(result);
     });
 
+    // get all request ass for hr
+    app.get("/assets/all-requests/:email", async (req, res) => {
+      const email = req.params?.email;
+      const query = { "provider_info.email": email, status: "pending" };
+      const result = await assetCollection.find(query).toArray();
+      res.send(result);
+    });
+
     // add a asset to db
     app.post("/assets", async (req, res) => {
       const assetData = req.body;
@@ -84,7 +92,7 @@ async function run() {
     // update some property by id
     app.patch("/asset/update/:id", async (req, res) => {
       const id = req.params.id;
-      console.log(id,'-----------id');
+      console.log(id, "-----------id");
       const assetInfo = req.body;
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
