@@ -28,7 +28,29 @@ async function run() {
     const employeeCollection = client.db("assetDB").collection("employees");
     const assetCollection = client.db("assetDB").collection("assets");
     const paymentCollection = client.db("assetDB").collection("payments");
+    const teamCollection = client.db("assetDB").collection("teams");
 
+    // team related api
+    app.post("/teams", async (req, res) => {
+      const teamMemberData = req.body;
+      console.log(teamMemberData);
+
+      //employee status update isJoin false to true
+      const employeeQuery = { email: teamMemberData.employee_info.email };
+      await employeeCollection.updateOne(employeeQuery, {
+        $set: { isJoin: true },
+      });
+
+      // added a employee count property on HR document and every time add a employee employee count increased by 1
+      const hrQuery = { email: { $regex: teamMemberData.hr_info.email } };
+      await employeeCollection.updateOne(hrQuery, {
+        $inc: { employee_count: 1 },
+      });
+
+      // add team member to db
+      const result = await teamCollection.insertOne(teamMemberData);
+      res.send(result);
+    });
     // employee related api
 
     // get all employees who are not join any team
@@ -48,7 +70,9 @@ async function run() {
     // get single employee data
     app.get("/employee/:email", async (req, res) => {
       const email = req.params.email;
-      const query = { email: { $regex: email, $options: "i" }, role: "HR" };
+      const role = req.query.role;
+      console.log(role);
+      const query = { email: { $regex: email, $options: "i" }, role: role };
       const result = await employeeCollection.findOne(query);
       res.send(result);
     });
