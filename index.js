@@ -74,7 +74,7 @@ async function run() {
       res.send(result);
     });
 
-    // get requested assets for employee
+    // get all requested assets for employee
     app.get("/my-requested-assets/:email", async (req, res) => {
       const email = req.params.email;
       const query = { "requester_info.email": email };
@@ -98,6 +98,28 @@ async function run() {
     app.post("/assets", async (req, res) => {
       const assetData = req.body;
       const result = await assetCollection.insertOne(assetData);
+      res.send(result);
+    });
+
+    // my requested asset status update to cancel
+    app.patch("/my-requested-asset/:id", async (req, res) => {
+      const id = req.params.id;
+      const status = req.body.status;
+      const query = { _id: new ObjectId(id) };
+
+      let updateDoc;
+      if (status === "cancel") {
+        updateDoc = {
+          $set: { status },
+        };
+      } else if (status === "return") {
+        updateDoc = {
+          $set: { status },
+          $inc: { product_quantity: 1 },
+        };
+      }
+
+      const result = await assetCollection.updateOne(query, updateDoc);
       res.send(result);
     });
 
