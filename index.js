@@ -30,6 +30,15 @@ async function run() {
     const paymentCollection = client.db("assetDB").collection("payments");
 
     // employee related api
+
+    // get all employees who are not join any team
+    app.get("/employees/not-affiliated", async (req, res) => {
+      //TODO: search,filter,sort
+      const query = { isJoin: false };
+      const result = await employeeCollection.find(query).toArray();
+      res.send(result);
+    });
+
     app.post("/employees", async (req, res) => {
       const employee = req.body;
       const result = await employeeCollection.insertOne(employee);
@@ -39,7 +48,7 @@ async function run() {
     // get single employee data
     app.get("/employee/:email", async (req, res) => {
       const email = req.params.email;
-      const query = { email: email, role: "HR" };
+      const query = { email: { $regex: email, $options: "i" }, role: "HR" };
       const result = await employeeCollection.findOne(query);
       res.send(result);
     });
@@ -47,8 +56,9 @@ async function run() {
     // get a employee role
     app.get("/employee/role/:email", async (req, res) => {
       const email = req.params.email;
-      console.log(email, "roll----------------------------");
-      const result = await employeeCollection.findOne({ email });
+      const query = { email: { $regex: email, $options: "i" } };
+      // console.log(email, "roll----------------------------");
+      const result = await employeeCollection.findOne(query);
       res.send(result);
     });
 
@@ -71,6 +81,14 @@ async function run() {
     app.get("/assets", async (req, res) => {
       // TODO: search, filter, sorting
       const result = await assetCollection.find().toArray();
+      res.send(result);
+    });
+
+    // get single asset data by id
+    app.get("/asset/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const result = await assetCollection.findOne(query);
       res.send(result);
     });
 
