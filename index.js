@@ -31,6 +31,16 @@ async function run() {
     const teamCollection = client.db("assetDB").collection("teams");
 
     // team related api
+
+    // get my team data by email
+    app.get("/my-team/:email", async (req, res) => {
+      console.log("-----------------call");
+      const email = req.params.email;
+      const query = { "hr_info.email": { $regex: email, $options: "i" } };
+      const result = await teamCollection.find(query).toArray();
+      res.send(result);
+    });
+
     app.post("/teams", async (req, res) => {
       const teamMemberData = req.body;
       console.log(teamMemberData);
@@ -51,6 +61,29 @@ async function run() {
       const result = await teamCollection.insertOne(teamMemberData);
       res.send(result);
     });
+
+    // delete team member by id
+    app.delete("/team/:id", async (req, res) => {
+      const data = req.query;
+      console.log(data, "------------------");
+      const id = req.params.id;
+
+      //update employ isJoin property true to false
+      const empQuery = { email: { $regex: data?.empEmail, $options: "i" } };
+      await employeeCollection.updateOne(empQuery, {
+        $set: { isJoin: false },
+      });
+
+      // update hr data member count decrease by 1
+      const hrQuery = { email: { $regex: data?.hrEmail, $options: "i" } };
+      await employeeCollection.updateOne(hrQuery, {
+        $inc: { employee_count: -1 },
+      });
+      // delete member from db
+      const result = await teamCollection.deleteOne({_id: new ObjectId(id)})
+      res.send(result);
+    });
+
     // employee related api
 
     // get all employees who are not join any team
