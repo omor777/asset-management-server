@@ -2,6 +2,7 @@ require("dotenv").config();
 
 const express = require("express");
 const cors = require("cors");
+const jwt = require("jsonwebtoken");
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 const app = express();
 const port = process.env.PORT || 4000;
@@ -21,6 +22,23 @@ const client = new MongoClient(uri, {
   },
 });
 
+const verifyToken = (req, res, next) => {
+  const token = req.headers.authorization.split(" ")[1];
+  // console.log(token, "token-------------------------");
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    req.user = decoded;
+    console.log(decoded,'user form client --------------------------------');
+    next();
+  });
+};
+
 async function run() {
   try {
     // Connect the client to the server	(optional starting in v4.7)
@@ -30,8 +48,16 @@ async function run() {
     const paymentCollection = client.db("assetDB").collection("payments");
     const teamCollection = client.db("assetDB").collection("teams");
 
-    // team related api
+    // jwt
+    app.post("/jwt", (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: "365d",
+      });
+      res.send({ token });
+    });
 
+    // team related api
     // get my team data by email
     app.get("/my-team/:email", async (req, res) => {
       console.log("-----------------call");
@@ -80,7 +106,7 @@ async function run() {
         $inc: { employee_count: -1 },
       });
       // delete member from db
-      const result = await teamCollection.deleteOne({_id: new ObjectId(id)})
+      const result = await teamCollection.deleteOne({ _id: new ObjectId(id) });
       res.send(result);
     });
 
@@ -135,7 +161,7 @@ async function run() {
     });
 
     // asset related api
-    app.get("/assets", async (req, res) => {
+    app.get("/assets", verifyToken, async (req, res) => {
       // TODO: search, filter, sorting
       const result = await assetCollection.find().toArray();
       res.send(result);
@@ -162,7 +188,7 @@ async function run() {
       // TODO: search functionality implemented
       const email = req.params?.email;
       const query = {
-        "provider_info.email": email,
+        "provider_info.email": { $regex: email, $options: "i" },
         request_count: { $gte: 0 },
       };
       const result = await assetCollection.find(query).toArray();
