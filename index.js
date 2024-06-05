@@ -34,7 +34,7 @@ const verifyToken = (req, res, next) => {
       return res.status(401).send({ message: "unauthorized access" });
     }
     req.user = decoded;
-    console.log(decoded,'user form client --------------------------------');
+    console.log(decoded, "user form client --------------------------------");
     next();
   });
 };
@@ -60,7 +60,7 @@ async function run() {
     // team related api
     // get my team data by email
     app.get("/my-team/:email", async (req, res) => {
-      console.log("-----------------call");
+      // console.log("-----------------call");
       const email = req.params.email;
       const query = { "hr_info.email": { $regex: email, $options: "i" } };
       const result = await teamCollection.find(query).toArray();
@@ -129,9 +129,10 @@ async function run() {
     // get single employee data
     app.get("/employee/:email", async (req, res) => {
       const email = req.params.email;
-      const role = req.query.role;
-      console.log(role);
-      const query = { email: { $regex: email, $options: "i" }, role: role };
+      console.log(email, "------------------------------->");
+      // const role = req.query.role;
+      // console.log(role);
+      const query = { email: { $regex: email, $options: "i" } };
       const result = await employeeCollection.findOne(query);
       res.send(result);
     });
@@ -192,6 +193,55 @@ async function run() {
         request_count: { $gte: 0 },
       };
       const result = await assetCollection.find(query).toArray();
+      res.send(result);
+    });
+
+    // get all pending request for HR Manager
+    app.get("/assets/pending-request/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+      const pipeline = [
+        {
+          $match: {
+            status: "pending",
+            "provider_info.email": email,
+          },
+        },
+      ];
+      const result = await assetCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
+    // get top most requested items
+    app.get("/assets/top-request/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+      const pipeline = [
+        {
+          $match: { "provider_info.email": email },
+        },
+        {
+          $sort: { request_count: -1 },
+        },
+        {
+          $limit: 4,
+        },
+      ];
+      const result = await assetCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
+    // get limited stock items for HR manager
+    app.get("/assets/limited-stock/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+      const pipeline = [
+        {
+          $match: {
+            "provider_info.email": email,
+            product_quantity: { $lt: 10 },
+          },
+        },
+      ];
+
+      const result = await assetCollection.aggregate(pipeline).toArray();
       res.send(result);
     });
 
@@ -299,6 +349,18 @@ async function run() {
     app.post("/payments", async (req, res) => {
       const paymentData = req.body;
       const result = await paymentCollection.insertOne(paymentData);
+      res.send(result);
+    });
+
+    // get my team for employee
+    app.get("/my-teams/e/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+      console.log(email, "==============email");
+      const team = await teamCollection.findOne({
+        "employee_info.email": email,
+      });
+      const query = { teamId: team?.teamId };
+      const result = await teamCollection.find(query).toArray();
       res.send(result);
     });
 
