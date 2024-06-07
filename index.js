@@ -47,6 +47,9 @@ async function run() {
     const assetCollection = client.db("assetDB").collection("assets");
     const paymentCollection = client.db("assetDB").collection("payments");
     const teamCollection = client.db("assetDB").collection("teams");
+    const requestedAssetCollection = client
+      .db("assetDB")
+      .collection("requestedAssets");
 
     // jwt
     app.post("/jwt", (req, res) => {
@@ -129,7 +132,6 @@ async function run() {
     // get single employee data
     app.get("/employee/:email", async (req, res) => {
       const email = req.params.email;
-      console.log(email, "------------------------------->");
       // const role = req.query.role;
       // console.log(role);
       const query = { email: { $regex: email, $options: "i" } };
@@ -162,9 +164,42 @@ async function run() {
     });
 
     // asset related api
-    app.get("/assets", verifyToken, async (req, res) => {
-      // TODO: search, filter, sorting
-      const result = await assetCollection.find().toArray();
+    app.get("/assets", async (req, res) => {
+      // TODO: pagination
+      const filter = req?.query?.filter;
+      const sort = req?.query?.sort;
+      console.log(filter);
+      // set filter field conditionally
+      let field;
+      if (filter === "Returnable" || filter === "Non-returnable") {
+        field = "product_type";
+      } else if (filter === "Available" || filter === "Out of stock") {
+        field = "availability";
+      }
+
+      // add filter query
+      let query;
+      if (filter) {
+        query = { [field]: filter };
+      }
+
+      //set field conditionally
+      let sortField;
+      if (sort === "date-asc" || sort === "date-dsc") {
+        sortField = "added_date";
+      } else if (sort === "quantity-asc" || sort === "quantity-dsc") {
+        sortField = "product_quantity";
+      }
+
+      let sortQuery;
+      if (sort) {
+        sortQuery = { [sortField]: sort.split("-")[1] === "asc" ? 1 : -1 };
+      }
+
+      const result = await assetCollection
+        .find(query)
+        .sort(sortQuery)
+        .toArray();
       res.send(result);
     });
 
@@ -180,19 +215,19 @@ async function run() {
     app.get("/my-requested-assets/:email", async (req, res) => {
       const email = req.params.email;
       const query = { "requester_info.email": email };
-      const result = await assetCollection.find(query).toArray();
+      const result = await requestedAssetCollection.find(query).toArray();
       res.send(result);
     });
 
     // get all request ass for hr
     app.get("/assets/all-requests/:email", async (req, res) => {
       // TODO: search functionality implemented
-      const email = req.params?.email;
+      const email = req.params?.email.toLowerCase();
       const query = {
-        "provider_info.email": { $regex: email, $options: "i" },
-        request_count: { $gte: 0 },
+        "provider_info.email": email,
+        // request_count: { $gte: 0 },
       };
-      const result = await assetCollection.find(query).toArray();
+      const result = await requestedAssetCollection.find(query).toArray();
       res.send(result);
     });
 
@@ -207,7 +242,9 @@ async function run() {
           },
         },
       ];
-      const result = await assetCollection.aggregate(pipeline).toArray();
+      const result = await requestedAssetCollection
+        .aggregate(pipeline)
+        .toArray();
       res.send(result);
     });
 
@@ -245,6 +282,101 @@ async function run() {
       res.send(result);
     });
 
+    // get total returnable and non returnable count
+    app.get("/assets/count/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+      const pipeline = [
+        {
+          $match: {
+            "provider_info.email": email,
+            status: "pending",
+          },
+        },
+        {
+          $group: {
+            _id: "$product_type",
+            count: { $sum: 1 },
+          },
+        },
+      ];
+      const results = await assetCollection.aggregate(pipeline).toArray();
+
+      const counts = {
+        returnable: 0,
+        nonReturnable: 0,
+      };
+
+      results.forEach((result) => {
+        if (result._id === "Returnable") {
+          counts.returnable = result.count;
+        } else if (result._id === "Non-returnable") {
+          counts.nonReturnable = result.count;
+        }
+      });
+
+      res.send(counts);
+    });
+
+    /**
+     * FOR EMPLOYEE
+     *
+     */
+
+    //get all pending request for employee
+    app.get("/assets/e/pending-request/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+      const pipeline = [
+        {
+          $match: {
+            "requester_info.email": email,
+            status: "pending",
+          },
+        },
+      ];
+      const result = await assetCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+    //TODO:
+    // get all my monthly request
+    app.get("/assets/e/monthly-request/:email", async (req, res) => {
+      const email = req.params.email.toLowerCase();
+
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      const firstDayOfNextMonth = new Date(
+        now.getFullYear(),
+        now.getMonth() + 1,
+        1
+      );
+
+      // const now = new Date();
+      // const firstDayOfMonth = new Date(
+      //   Date.UTC(now.getFullYear(), now.getMonth(), 1)
+      // );
+      // const firstDayOfNextMonth = new Date(
+      //   Date.UTC(now.getFullYear(), now.getMonth() + 1, 1)
+      // );
+
+      console.log("Email:", email);
+      console.log("First Day of Month:", firstDayOfMonth);
+      console.log("First Day of Next Month:", firstDayOfNextMonth);
+
+      const pipeline = [
+        {
+          $match: {
+            "requester_info.email": email,
+            requested_date: {
+              $gte: firstDayOfMonth,
+              $lt: firstDayOfNextMonth,
+            },
+          },
+        },
+      ];
+
+      const result = await assetCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
     // add a asset to db
     app.post("/assets", async (req, res) => {
       const assetData = req.body;
@@ -252,32 +384,89 @@ async function run() {
       res.send(result);
     });
 
-    // my requested asset status update to cancel
-    app.patch("/my-requested-asset/:id", async (req, res) => {
+    // update a single asset data by id
+    app.patch("/asset/:id", async (req, res) => {
       const id = req.params.id;
-      const status = req.body.status;
+      const updateData = req.body;
       const query = { _id: new ObjectId(id) };
-
-      let updateDoc;
-      if (status === "cancel") {
-        updateDoc = {
-          $set: { status },
-        };
-      } else if (status === "return") {
-        updateDoc = {
-          $set: { status },
-          $inc: { product_quantity: 1 },
-        };
-      }
+      const updateDoc = {
+        $set: {
+          ...updateData,
+        },
+      };
 
       const result = await assetCollection.updateOne(query, updateDoc);
+      res.send(result);
+    });
+
+    // my requested asset handle return button functionality
+    app.patch("/asset/return", async (req, res) => {
+      const { reqId, assetId } = req.body;
+
+      // update status to return
+      const result = await requestedAssetCollection.updateOne(
+        { _id: new ObjectId(reqId) },
+        {
+          $set: { status: "return" },
+        }
+      );
+
+      // increment asset quantity by 1
+      await assetCollection.updateOne(
+        { _id: new ObjectId(assetId) },
+        {
+          $inc: { product_quantity: 1 },
+        }
+      );
+
+      res.send(result);
+    });
+
+    // requested asset collection related api
+    app.post("/requested-asset", async (req, res) => {
+      const asset = req.body;
+      const id = req.body?.requestedAssetId;
+
+      // check already request or not
+      const requestedAssetId = asset?.requestedAssetId;
+      const reqEmail = asset?.requester_info?.email.toLowerCase();
+      const alreadyRequest = await requestedAssetCollection.findOne({
+        $and: [
+          {
+            "requester_info.email": reqEmail,
+          },
+          { requestedAssetId },
+        ],
+      });
+
+      if (alreadyRequest) {
+        return res.send({ insertedId: null });
+      }
+
+      // added request asset data
+      const result = await requestedAssetCollection.insertOne(asset);
+
+      // increment asset request count and decrement product quantity
+      const query = { _id: new ObjectId(id) };
+
+      await assetCollection.updateOne(query, {
+        $inc: { request_count: 1 },
+      });
+
+      // if product quantity is less than the update the product availability Available to Out of stock
+      // await assetCollection.updateOne(
+      //   { product_quantity: { $lt: 1 } },
+      //   {
+      //     $set: { availability: "Out of stock" },
+      //   }
+      // );
+
       res.send(result);
     });
 
     // update some property by id
     app.patch("/asset/update/:id", async (req, res) => {
       const id = req.params.id;
-      console.log(id, "-----------id");
       const assetInfo = req.body;
       const query = { _id: new ObjectId(id) };
       const updatedDoc = {
@@ -290,33 +479,52 @@ async function run() {
       res.send(result);
     });
 
-    // update request asset property by id
-    app.patch("/asset/req-asset/:id", async (req, res) => {
-      const id = req.params.id;
-      const updatedAssetData = req.body;
-
-      console.log(updatedAssetData, "---------from client");
+    // handle approve button functionality
+    app.patch("/asset/approve", async (req, res) => {
+      const data = req.body;
 
       // Create the initial update document
       const updateDoc = {
         $set: {
-          ...updatedAssetData,
+          status: data?.status,
+          approve_date: data?.approve_date,
         },
-        $inc: { product_quantity: -1, request_count: 1 },
       };
 
       // First update: Decrease product quantity and update other fields
-      const result = await assetCollection.updateOne(
-        { _id: new ObjectId(id) },
+      const result = await requestedAssetCollection.updateOne(
+        { _id: new ObjectId(data?.reqId) },
         updateDoc
       );
 
-      // Second update: Check and set availability if product_quantity is less than 1
+      // Second: decrease product quantity by 1
       await assetCollection.updateOne(
-        { _id: new ObjectId(id), product_quantity: { $lt: 1 } },
-        { $set: { availability: "Out of stock" } }
+        { _id: new ObjectId(data?.assetId) },
+        {
+          $inc: { product_quantity: -1 },
+        }
       );
 
+      // Third update: Check and set availability if product_quantity is less than 1
+      await assetCollection.updateOne(
+        { _id: new ObjectId(data?.assetId), product_quantity: { $lt: 1 } },
+        {
+          $set: { availability: "Out of stock" },
+        }
+      );
+
+      res.send(result);
+    });
+
+    // handle reject button functionality
+    app.patch("/asset/update-status/:id", async (req, res) => {
+      const id = req.params.id;
+      const status = req.body?.status;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: { status: status },
+      };
+      const result = await requestedAssetCollection.updateOne(query, updateDoc);
       res.send(result);
     });
 
@@ -324,7 +532,7 @@ async function run() {
     app.delete("/asset/:id", async (req, res) => {
       const id = req.params.id;
       const result = await assetCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send({ result, r });
+      res.send(result);
     });
 
     // create payment intent
