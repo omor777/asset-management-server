@@ -8,7 +8,11 @@ const app = express();
 const port = process.env.PORT || 4000;
 
 app.use(express.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+  })
+);
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.6ze9kj8.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
@@ -94,7 +98,6 @@ async function run() {
     // delete team member by id
     app.delete("/team/:id", async (req, res) => {
       const data = req.query;
-      console.log(data, "------------------");
       const id = req.params.id;
 
       //update employ isJoin property true to false
@@ -148,18 +151,42 @@ async function run() {
       res.send(result);
     });
 
-    // update employee property
-    app.patch("/employee/:email", async (req, res) => {
+    // when payment is successful update some property HR document
+    app.patch("/employee/payment/:email", async (req, res) => {
       const email = req.params.email;
-      const status = req.body.status;
-      console.log(status);
-      const query = { email };
-      const updateDoc = {
-        $set: {
-          status,
-        },
-      };
-      const result = await employeeCollection.updateOne(query, updateDoc);
+      const { price } = req.body;
+
+      const members = price === 5 ? 5 : price === 8 ? 10 : 20;
+      // check if the user payment first time or purchase for increase limit
+      const isMemberLimitExist = await employeeCollection.findOne({
+        email: email,
+      });
+      console.log(isMemberLimitExist,'------------------------->');
+      let updateDoc;
+      if (!isMemberLimitExist?.member_limit) {
+        console.log('I am if condition');
+        updateDoc = {
+          $set: {
+            "package_info.price": price,
+            "package_info.members": members,
+            payment_status: "success",
+            member_limit: members,
+          },
+        };
+      } else {
+        console.log('I am else condition');
+        updateDoc = {
+          $set: {
+            "package_info.price": price,
+            "package_info.members": members,
+          },
+          $inc: { member_limit: members },
+        };
+      }
+      const result = await employeeCollection.updateOne(
+        { email: email },
+        updateDoc
+      );
       res.send(result);
     });
 
@@ -168,6 +195,7 @@ async function run() {
       // TODO: pagination
       const filter = req?.query?.filter;
       const sort = req?.query?.sort;
+      const search = req?.query?.search;
       console.log(filter);
       // set filter field conditionally
       let field;
@@ -182,6 +210,13 @@ async function run() {
       if (filter) {
         query = { [field]: filter };
       }
+
+      // search query
+      if (search) {
+        query = { product_name: { $regex: search, $options: "i" } };
+      }
+
+      console.log(search);
 
       //set field conditionally
       let sortField;
@@ -212,9 +247,28 @@ async function run() {
     });
 
     // get all requested assets for employee
-    app.get("/my-requested-assets/:email", async (req, res) => {
+    app.get("/assets/requested-assets/:email", async (req, res) => {
+      const search = req?.query?.search;
+      const filter = req?.query?.filter;
       const email = req.params.email;
+
       const query = { "requester_info.email": email };
+      //if search value is present then add search property to query
+      if (search) {
+        query.product_name = { $regex: search, $options: "i" };
+      }
+
+      // if filter value is present then add filter property ot query
+      let filterField;
+      if (filter) {
+        if (filter === "pending" || filter === "approve") {
+          filterField = "status";
+        } else if (filter === "Returnable" || filter === "Non-returnable") {
+          filterField = "product_type";
+        }
+        query[filterField] = filter;
+      }
+
       const result = await requestedAssetCollection.find(query).toArray();
       res.send(result);
     });
@@ -400,8 +454,8 @@ async function run() {
     });
 
     // my requested asset handle return button functionality
-    app.patch("/asset/return", async (req, res) => {
-      const { reqId, assetId } = req.body;
+    app.patch("/asset/request/return", async (req, res) => {
+      const { reqId, assetId } = req?.body || {};
 
       // update status to return
       const result = await requestedAssetCollection.updateOne(
@@ -423,7 +477,7 @@ async function run() {
     });
 
     // requested asset collection related api
-    app.post("/requested-asset", async (req, res) => {
+    app.post("/asset/request", async (req, res) => {
       const asset = req.body;
       const id = req.body?.requestedAssetId;
 
@@ -479,9 +533,8 @@ async function run() {
       res.send(result);
     });
 
-    // handle approve button functionality
-    app.patch("/asset/approve", async (req, res) => {
-      const data = req.body;
+    app.patch("/asset/request/approve", async (req, res) => {
+      const data = req?.body;
 
       // Create the initial update document
       const updateDoc = {
