@@ -74,7 +74,46 @@ async function run() {
       res.send(result);
     });
 
-    app.post("/teams", async (req, res) => {
+    // added multiple team member at once
+    app.post("/teams/multiple", async (req, res) => {
+      const teams = req.body;
+
+      // get HR email
+      const hrEmail = teams[0]?.hr_info?.email.toLowerCase();
+      // console.log(hrEmail);
+
+      // convert all employee id to object ID
+      const empIds = teams
+        ?.reduce((acc, cur) => {
+          acc.push(cur.employeeId);
+          return acc;
+        }, [])
+        .map((id) => new ObjectId(id));
+
+      // update each employee isJoin property value false to true whose id match with empIds
+      await employeeCollection.updateMany(
+        {
+          _id: { $in: empIds },
+        },
+        {
+          $set: { isJoin: true },
+        }
+      );
+
+      // added a employee count property on HR document and every time add a employee employee count increased by teams.length
+      await employeeCollection.updateOne(
+        { email: hrEmail },
+        {
+          $inc: { employee_count: teams.length },
+        }
+      );
+
+      // add multiple team member to db
+      const result = await teamCollection.insertMany(teams);
+      res.send(result);
+    });
+
+    app.post("/teams/single", async (req, res) => {
       const teamMemberData = req.body;
       console.log(teamMemberData);
 
@@ -161,10 +200,10 @@ async function run() {
       const isMemberLimitExist = await employeeCollection.findOne({
         email: email,
       });
-      console.log(isMemberLimitExist,'------------------------->');
+      console.log(isMemberLimitExist, "------------------------->");
       let updateDoc;
       if (!isMemberLimitExist?.member_limit) {
-        console.log('I am if condition');
+        console.log("I am if condition");
         updateDoc = {
           $set: {
             "package_info.price": price,
@@ -174,7 +213,7 @@ async function run() {
           },
         };
       } else {
-        console.log('I am else condition');
+        console.log("I am else condition");
         updateDoc = {
           $set: {
             "package_info.price": price,
@@ -207,6 +246,55 @@ async function run() {
 
       // add filter query
       let query;
+      if (filter) {
+        query = { [field]: filter };
+      }
+
+      // search query
+      if (search) {
+        query = { product_name: { $regex: search, $options: "i" } };
+      }
+
+      console.log(search);
+
+      //set field conditionally
+      let sortField;
+      if (sort === "date-asc" || sort === "date-dsc") {
+        sortField = "added_date";
+      } else if (sort === "quantity-asc" || sort === "quantity-dsc") {
+        sortField = "product_quantity";
+      }
+
+      let sortQuery;
+      if (sort) {
+        sortQuery = { [sortField]: sort.split("-")[1] === "asc" ? 1 : -1 };
+      }
+
+      const result = await assetCollection
+        .find(query)
+        .sort(sortQuery)
+        .toArray();
+      res.send(result);
+    });
+
+    // get asset list data for HR specific data
+    app.get("/assets/hr/:email", async (req, res) => {
+      // TODO: pagination
+      const email = req.params.email.toLowerCase();
+      const filter = req?.query?.filter;
+      const sort = req?.query?.sort;
+      const search = req?.query?.search;
+
+      // set filter field conditionally
+      let field;
+      if (filter === "Returnable" || filter === "Non-returnable") {
+        field = "product_type";
+      } else if (filter === "Available" || filter === "Out of stock") {
+        field = "availability";
+      }
+
+      // add filter query
+      let query = { "provider_info.email": email };
       if (filter) {
         query = { [field]: filter };
       }
@@ -275,12 +363,29 @@ async function run() {
 
     // get all request ass for hr
     app.get("/assets/all-requests/:email", async (req, res) => {
-      // TODO: search functionality implemented
+    
       const email = req.params?.email.toLowerCase();
-      const query = {
-        "provider_info.email": email,
-        // request_count: { $gte: 0 },
-      };
+      const search = req?.query?.search;
+
+      let query;
+      if (search) {
+        query = {
+          "provider_info.email": email,
+          $or: [
+            {
+              "requester_info.email": { $regex: search, $options: "i" },
+            },
+            {
+              "requester_info.name": { $regex: search, $options: "i" },
+            },
+          ],
+        };
+      } else {
+        query = {
+          "provider_info.email": email,
+        };
+      }
+
       const result = await requestedAssetCollection.find(query).toArray();
       res.send(result);
     });
