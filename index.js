@@ -32,7 +32,7 @@ const client = new MongoClient(uri, {
 
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization.split(" ")[1];
-  // console.log(token, "token-------------------------");
+
   if (!token) {
     return res.status(401).send({ message: "unauthorized access" });
   }
@@ -42,7 +42,7 @@ const verifyToken = (req, res, next) => {
       return res.status(401).send({ message: "unauthorized access" });
     }
     req.user = decoded;
-    console.log(decoded, "user form client --------------------------------");
+
     next();
   });
 };
@@ -70,8 +70,7 @@ async function run() {
 
     // team related api
     // get my team data by email
-    app.get("/my-team/:email", async (req, res) => {
-      // console.log("-----------------call");
+    app.get("/my-team/:email", verifyToken, async (req, res) => {
       const email = req.params.email;
       const page = parseInt(req?.query?.page) - 1;
       const size = parseInt(req?.query?.size);
@@ -138,7 +137,6 @@ async function run() {
 
     app.post("/teams/single", async (req, res) => {
       const teamMemberData = req.body;
-      console.log(teamMemberData);
 
       //employee status update isJoin false to true
       const employeeQuery = { email: teamMemberData.employee_info.email };
@@ -181,7 +179,7 @@ async function run() {
     // employee related api
 
     // get all employees who are not join any team
-    app.get("/employees/not-affiliated", async (req, res) => {
+    app.get("/employees/not-affiliated", verifyToken, async (req, res) => {
       //TODO: search,filter,sort
       const page = parseInt(req?.query?.page) - 1;
       const size = parseInt(req?.query?.size);
@@ -216,7 +214,7 @@ async function run() {
     app.get("/employee/:email", async (req, res) => {
       const email = req.params.email;
       // const role = req.query.role;
-      // console.log(role);
+
       const query = { email: { $regex: email, $options: "i" } };
       const result = await employeeCollection.findOne(query);
       res.send(result);
@@ -226,7 +224,7 @@ async function run() {
     app.get("/employee/role/:email", async (req, res) => {
       const email = req.params.email;
       const query = { email: { $regex: email, $options: "i" } };
-      // console.log(email, "roll----------------------------");
+
       const result = await employeeCollection.findOne(query);
       res.send(result);
     });
@@ -241,10 +239,9 @@ async function run() {
       const isMemberLimitExist = await employeeCollection.findOne({
         email: email,
       });
-      console.log(isMemberLimitExist, "------------------------->");
+
       let updateDoc;
       if (!isMemberLimitExist?.member_limit) {
-        console.log("I am if condition");
         updateDoc = {
           $set: {
             "package_info.price": price,
@@ -254,7 +251,6 @@ async function run() {
           },
         };
       } else {
-        console.log("I am else condition");
         updateDoc = {
           $set: {
             "package_info.price": price,
@@ -271,7 +267,7 @@ async function run() {
     });
 
     // asset related api
-    app.get("/assets", async (req, res) => {
+    app.get("/assets", verifyToken, async (req, res) => {
       // TODO: pagination
       const filter = req?.query?.filter;
       const sort = req?.query?.sort;
@@ -300,8 +296,6 @@ async function run() {
         query = { product_name: { $regex: search, $options: "i" } };
       }
 
-      console.log(search);
-
       //set field conditionally
       let sortField;
       if (sort === "date-asc" || sort === "date-dsc") {
@@ -325,7 +319,7 @@ async function run() {
     });
 
     // get asset list data for HR specific data
-    app.get("/assets/hr/:email", async (req, res) => {
+    app.get("/assets/hr/:email", verifyToken, async (req, res) => {
       // TODO: pagination
       const email = req.params.email.toLowerCase();
       const filter = req?.query?.filter;
@@ -352,8 +346,6 @@ async function run() {
       if (search) {
         query = { product_name: { $regex: search, $options: "i" } };
       }
-
-      console.log(search);
 
       //set field conditionally
       let sortField;
@@ -391,43 +383,47 @@ async function run() {
     });
 
     // get all requested assets for employee
-    app.get("/assets/requested-assets/:email", async (req, res) => {
-      const search = req?.query?.search;
-      const filter = req?.query?.filter;
-      const email = req.params.email;
-      const page = parseInt(req?.query?.page) - 1;
-      const size = parseInt(req?.query?.size);
+    app.get(
+      "/assets/requested-assets/:email",
+      verifyToken,
+      async (req, res) => {
+        const search = req?.query?.search;
+        const filter = req?.query?.filter;
+        const email = req.params.email;
+        const page = parseInt(req?.query?.page) - 1;
+        const size = parseInt(req?.query?.size);
 
-      const query = { "requester_info.email": email };
+        const query = { "requester_info.email": email };
 
-      const count = await requestedAssetCollection.countDocuments(query);
+        const count = await requestedAssetCollection.countDocuments(query);
 
-      //if search value is present then add search property to query
-      if (search) {
-        query.product_name = { $regex: search, $options: "i" };
-      }
-
-      // if filter value is present then add filter property ot query
-      let filterField;
-      if (filter) {
-        if (filter === "pending" || filter === "approve") {
-          filterField = "status";
-        } else if (filter === "Returnable" || filter === "Non-returnable") {
-          filterField = "product_type";
+        //if search value is present then add search property to query
+        if (search) {
+          query.product_name = { $regex: search, $options: "i" };
         }
-        query[filterField] = filter;
-      }
 
-      const myAssets = await requestedAssetCollection
-        .find(query)
-        .skip(page * size)
-        .limit(size)
-        .toArray();
-      res.send({ myAssets, count });
-    });
+        // if filter value is present then add filter property ot query
+        let filterField;
+        if (filter) {
+          if (filter === "pending" || filter === "approve") {
+            filterField = "status";
+          } else if (filter === "Returnable" || filter === "Non-returnable") {
+            filterField = "product_type";
+          }
+          query[filterField] = filter;
+        }
+
+        const myAssets = await requestedAssetCollection
+          .find(query)
+          .skip(page * size)
+          .limit(size)
+          .toArray();
+        res.send({ myAssets, count });
+      }
+    );
 
     // get all request ass for hr
-    app.get("/assets/all-requests/:email", async (req, res) => {
+    app.get("/assets/all-requests/:email", verifyToken, async (req, res) => {
       const email = req.params?.email.toLowerCase();
       const search = req?.query?.search;
       const page = parseInt(req?.query?.page) - 1;
@@ -605,7 +601,7 @@ async function run() {
     });
 
     // add a asset to db
-    app.post("/assets", async (req, res) => {
+    app.post("/assets", verifyToken, async (req, res) => {
       const assetData = req.body;
       const result = await assetCollection.insertOne(assetData);
       res.send(result);
@@ -765,7 +761,7 @@ async function run() {
     app.post("/create-payment-intent", async (req, res) => {
       const { price } = req.body;
       const priceInCent = parseFloat(price) * 100;
-      // console.log(priceInCent, "--------------> price");
+
       if (!price || priceInCent < 1) return;
       // generate client secrete
       const { client_secret } = await stripe.paymentIntents.create({
@@ -787,7 +783,7 @@ async function run() {
     });
 
     // get my team for employee
-    app.get("/my-teams/e/:email", async (req, res) => {
+    app.get("/my-teams/e/:email", verifyToken, async (req, res) => {
       const email = req.params.email.toLowerCase();
       const page = parseInt(req?.query?.page) - 1;
       const size = parseInt(req?.query?.size);
@@ -811,7 +807,7 @@ async function run() {
 }
 run().catch(console.dir);
 
-app.get("/", async (req, res) => {
+app.get("/", async (_req, res) => {
   res.send({ message: "Asset management system!!" });
 });
 
