@@ -10,7 +10,11 @@ const port = process.env.PORT || 4000;
 app.use(express.json());
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: [
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "https://asset-management-system-330cd.web.app",
+    ],
   })
 );
 
@@ -69,8 +73,27 @@ async function run() {
     app.get("/my-team/:email", async (req, res) => {
       // console.log("-----------------call");
       const email = req.params.email;
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
       const query = { "hr_info.email": { $regex: email, $options: "i" } };
-      const result = await teamCollection.find(query).toArray();
+
+      const count = await teamCollection.countDocuments({
+        "hr_info.email": { $regex: email, $options: "i" },
+      });
+
+      const employees = await teamCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      res.send({ employees, count });
+    });
+
+    // get company info for employee
+    app.get("/company-info/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { "employee_info.email": email };
+      const result = await teamCollection.findOne(query);
       res.send(result);
     });
 
@@ -79,8 +102,7 @@ async function run() {
       const teams = req.body;
 
       // get HR email
-      const hrEmail = teams[0]?.hr_info?.email.toLowerCase();
-      // console.log(hrEmail);
+      const hrEmail = teams[0]?.hr_info?.email;
 
       // convert all employee id to object ID
       const empIds = teams
@@ -101,8 +123,9 @@ async function run() {
       );
 
       // added a employee count property on HR document and every time add a employee employee count increased by teams.length
+
       await employeeCollection.updateOne(
-        { email: hrEmail },
+        { email: { $regex: hrEmail, $options: "i" } },
         {
           $inc: { employee_count: teams.length },
         }
@@ -160,13 +183,31 @@ async function run() {
     // get all employees who are not join any team
     app.get("/employees/not-affiliated", async (req, res) => {
       //TODO: search,filter,sort
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
       const query = { isJoin: false };
-      const result = await employeeCollection.find(query).toArray();
-      res.send(result);
+
+      const count = await employeeCollection.countDocuments(query);
+
+      const employees = await employeeCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+
+      res.send({ employees, count });
     });
 
     app.post("/employees", async (req, res) => {
       const employee = req.body;
+      const query = { email: employee.email };
+
+      //check if user already exist
+      const isExist = await employeeCollection.findOne(query);
+      if (isExist) {
+        return res.send({ inserted: null });
+      }
+
       const result = await employeeCollection.insertOne(employee);
       res.send(result);
     });
@@ -235,7 +276,11 @@ async function run() {
       const filter = req?.query?.filter;
       const sort = req?.query?.sort;
       const search = req?.query?.search;
-      console.log(filter);
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
+
+      const count = await assetCollection.countDocuments();
+
       // set filter field conditionally
       let field;
       if (filter === "Returnable" || filter === "Non-returnable") {
@@ -270,11 +315,13 @@ async function run() {
         sortQuery = { [sortField]: sort.split("-")[1] === "asc" ? 1 : -1 };
       }
 
-      const result = await assetCollection
+      const assets = await assetCollection
         .find(query)
+        .skip(page * size)
+        .limit(size)
         .sort(sortQuery)
         .toArray();
-      res.send(result);
+      res.send({ assets, count });
     });
 
     // get asset list data for HR specific data
@@ -284,6 +331,8 @@ async function run() {
       const filter = req?.query?.filter;
       const sort = req?.query?.sort;
       const search = req?.query?.search;
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
 
       // set filter field conditionally
       let field;
@@ -319,11 +368,18 @@ async function run() {
         sortQuery = { [sortField]: sort.split("-")[1] === "asc" ? 1 : -1 };
       }
 
-      const result = await assetCollection
+      const count = await assetCollection.countDocuments({
+        "provider_info.email": { $regex: email, $options: "i" },
+      });
+
+      const assets = await assetCollection
         .find(query)
+        .skip(page * size)
+        .limit(size)
         .sort(sortQuery)
         .toArray();
-      res.send(result);
+
+      res.send({ assets, count });
     });
 
     // get single asset data by id
@@ -339,8 +395,13 @@ async function run() {
       const search = req?.query?.search;
       const filter = req?.query?.filter;
       const email = req.params.email;
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
 
       const query = { "requester_info.email": email };
+
+      const count = await requestedAssetCollection.countDocuments(query);
+
       //if search value is present then add search property to query
       if (search) {
         query.product_name = { $regex: search, $options: "i" };
@@ -357,16 +418,20 @@ async function run() {
         query[filterField] = filter;
       }
 
-      const result = await requestedAssetCollection.find(query).toArray();
-      res.send(result);
+      const myAssets = await requestedAssetCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      res.send({ myAssets, count });
     });
 
     // get all request ass for hr
     app.get("/assets/all-requests/:email", async (req, res) => {
-    
       const email = req.params?.email.toLowerCase();
       const search = req?.query?.search;
-
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
       let query;
       if (search) {
         query = {
@@ -386,7 +451,23 @@ async function run() {
         };
       }
 
-      const result = await requestedAssetCollection.find(query).toArray();
+      const count = await requestedAssetCollection.countDocuments({
+        "provider_info.email": { $regex: email, $options: "i" },
+      });
+
+      const reqAssets = await requestedAssetCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      res.send({ reqAssets, count });
+    });
+
+    // get all request count
+    app.get("/all-request/count/:email", async (req, res) => {
+      const email = req.params.email;
+      const query = { "provider_info.email": email };
+      const result = await requestedAssetCollection.countDocuments(query);
       res.send(result);
     });
 
@@ -399,6 +480,9 @@ async function run() {
             status: "pending",
             "provider_info.email": email,
           },
+        },
+        {
+          $limit: 5,
         },
       ];
       const result = await requestedAssetCollection
@@ -458,22 +542,14 @@ async function run() {
           },
         },
       ];
-      const results = await assetCollection.aggregate(pipeline).toArray();
+      const data = await requestedAssetCollection.aggregate(pipeline).toArray();
 
-      const counts = {
-        returnable: 0,
-        nonReturnable: 0,
-      };
+      const result = data.reduce((acc, cur) => {
+        acc.push({ name: cur._id, value: cur.count });
+        return acc;
+      }, []);
 
-      results.forEach((result) => {
-        if (result._id === "Returnable") {
-          counts.returnable = result.count;
-        } else if (result._id === "Non-returnable") {
-          counts.nonReturnable = result.count;
-        }
-      });
-
-      res.send(counts);
+      res.send(result);
     });
 
     /**
@@ -484,6 +560,14 @@ async function run() {
     //get all pending request for employee
     app.get("/assets/e/pending-request/:email", async (req, res) => {
       const email = req.params.email.toLowerCase();
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
+
+      const count = await requestedAssetCollection.countDocuments({
+        "requester_info.email": email,
+        status: "pending",
+      });
+
       const pipeline = [
         {
           $match: {
@@ -492,48 +576,32 @@ async function run() {
           },
         },
       ];
-      const result = await assetCollection.aggregate(pipeline).toArray();
-      res.send(result);
+      const myAssets = await requestedAssetCollection
+        .aggregate(pipeline)
+        .skip(page & size)
+        .limit(size)
+        .toArray();
+      res.send({ myAssets, count });
     });
     //TODO:
     // get all my monthly request
     app.get("/assets/e/monthly-request/:email", async (req, res) => {
       const email = req.params.email.toLowerCase();
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
+      const query = {
+        "requester_info.email": email,
+      };
 
-      const now = new Date();
-      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      const firstDayOfNextMonth = new Date(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        1
-      );
+      const count = await requestedAssetCollection.countDocuments(query);
 
-      // const now = new Date();
-      // const firstDayOfMonth = new Date(
-      //   Date.UTC(now.getFullYear(), now.getMonth(), 1)
-      // );
-      // const firstDayOfNextMonth = new Date(
-      //   Date.UTC(now.getFullYear(), now.getMonth() + 1, 1)
-      // );
-
-      console.log("Email:", email);
-      console.log("First Day of Month:", firstDayOfMonth);
-      console.log("First Day of Next Month:", firstDayOfNextMonth);
-
-      const pipeline = [
-        {
-          $match: {
-            "requester_info.email": email,
-            requested_date: {
-              $gte: firstDayOfMonth,
-              $lt: firstDayOfNextMonth,
-            },
-          },
-        },
-      ];
-
-      const result = await assetCollection.aggregate(pipeline).toArray();
-      res.send(result);
+      const myAssets = await requestedAssetCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .sort({ requested_date: -1 })
+        .toArray();
+      res.send({ myAssets, count });
     });
 
     // add a asset to db
@@ -721,24 +789,24 @@ async function run() {
     // get my team for employee
     app.get("/my-teams/e/:email", async (req, res) => {
       const email = req.params.email.toLowerCase();
-      console.log(email, "==============email");
+      const page = parseInt(req?.query?.page) - 1;
+      const size = parseInt(req?.query?.size);
+
       const team = await teamCollection.findOne({
         "employee_info.email": email,
       });
       const query = { teamId: team?.teamId };
-      const result = await teamCollection.find(query).toArray();
-      res.send(result);
-    });
 
-    // await client.connect();
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    console.log(
-      "Pinged your deployment. You successfully connected to MongoDB!"
-    );
+      const count = await teamCollection.countDocuments(query);
+
+      const myTeams = await teamCollection
+        .find(query)
+        .skip(page * size)
+        .limit(size)
+        .toArray();
+      res.send({ myTeams, count });
+    });
   } finally {
-    // Ensures that the client will close when you finish/error
-    // await client.close();
   }
 }
 run().catch(console.dir);
