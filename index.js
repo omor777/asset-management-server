@@ -32,7 +32,7 @@ const client = new MongoClient(uri, {
 
 const verifyToken = (req, res, next) => {
   const token = req.headers.authorization.split(" ")[1];
-
+  console.log(token);
   if (!token) {
     return res.status(401).send({ message: "unauthorized access" });
   }
@@ -42,7 +42,6 @@ const verifyToken = (req, res, next) => {
       return res.status(401).send({ message: "unauthorized access" });
     }
     req.user = decoded;
-
     next();
   });
 };
@@ -608,7 +607,7 @@ async function run() {
     });
 
     // update a single asset data by id
-    app.patch("/asset/:id", async (req, res) => {
+    app.patch("/asset/:id",verifyToken, async (req, res) => {
       const id = req.params.id;
       const updateData = req.body;
       const query = { _id: new ObjectId(id) };
@@ -758,7 +757,7 @@ async function run() {
     });
 
     // create payment intent
-    app.post("/create-payment-intent", async (req, res) => {
+    app.post("/create-payment-intent",verifyToken, async (req, res) => {
       const { price } = req.body;
       const priceInCent = parseFloat(price) * 100;
 
